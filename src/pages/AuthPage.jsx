@@ -1,0 +1,122 @@
+import React, { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import { Shield, User, UserCheck, ArrowRight, Lock, Mail } from 'lucide-react';
+
+export const AuthPage = ({ setCurrentTab }) => {
+  const { loginCustom } = useAuth();
+  const [selectedRole, setSelectedRole] = useState('student');
+  const [emailOrName, setEmailOrName] = useState('');
+  const [password, setPassword] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!emailOrName.trim()) {
+      alert("Please enter your Name or Email ID");
+      return;
+    }
+    if (!password.trim()) {
+      alert("Please enter your password");
+      return;
+    }
+
+    loginCustom(emailOrName, password, selectedRole, emailOrName);
+
+    if (selectedRole === 'student') {
+      setCurrentTab('problems');
+    } else {
+      setCurrentTab('mentor-dashboard');
+    }
+  };
+
+  return (
+    <div className="min-h-[80vh] flex items-center justify-center p-4 sm:p-6">
+      <div className="max-w-md w-full bg-white rounded-3xl shadow-2xl p-8 border border-slate-100 space-y-6">
+        {/* Brand Logo Header */}
+        <div className="text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#1C7293] to-sky-400 flex items-center justify-center text-white mx-auto shadow-lg shadow-[#1C7293]/30">
+            <Shield size={28} />
+          </div>
+          <h2 className="text-2xl font-black text-[#21295C] tracking-tight">INVICTUS</h2>
+          <p className="text-xs text-slate-500">Sign in to your Student or Mentor Workspace</p>
+        </div>
+
+        {/* Role Toggle Tabs */}
+        <div className="grid grid-cols-2 gap-2 bg-slate-100 p-1.5 rounded-2xl">
+          <button
+            type="button"
+            onClick={() => setSelectedRole('student')}
+            className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+              selectedRole === 'student'
+                ? 'bg-[#065A82] text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <User size={15} />
+            Student
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedRole('mentor')}
+            className={`py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all ${
+              selectedRole === 'mentor'
+                ? 'bg-[#21295C] text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <UserCheck size={15} />
+            Mentor
+          </button>
+        </div>
+
+        {/* Login Form: Asking ONLY Name / Email ID and Password */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              {selectedRole === 'student' ? 'Student Name or Email ID' : 'Mentor Name or Email ID'}
+            </label>
+            <div className="relative">
+              <Mail size={18} className="absolute left-3.5 top-3.5 text-slate-400" />
+              <input
+                type="text"
+                required
+                value={emailOrName}
+                onChange={(e) => setEmailOrName(e.target.value)}
+                placeholder={selectedRole === 'student' ? 'e.g. Aarav Sharma or student@university.edu' : 'e.g. Dr. Meera Nambiar or mentor@company.com'}
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1C7293] focus:bg-white transition-all font-medium text-slate-800"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <Lock size={18} className="absolute left-3.5 top-3.5 text-slate-400" />
+              <input
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1C7293] focus:bg-white transition-all font-medium text-slate-800"
+              />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-[#1C7293] hover:bg-[#065A82] text-white py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-[#1C7293]/20 hover:shadow-xl transition-all flex items-center justify-center gap-2 group mt-2"
+          >
+            <span>Sign In as {selectedRole === 'student' ? 'Student' : 'Mentor'}</span>
+            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+          </button>
+        </form>
+
+        <p className="text-center text-[11px] text-slate-400">
+          Firebase Auth Session • Access persists once signed in
+        </p>
+      </div>
+    </div>
+  );
+};
