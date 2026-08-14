@@ -4,7 +4,7 @@ import { PROBLEM_STATEMENTS, INITIAL_ROADMAP_STEPS } from '../data/mockData';
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
-  // Load persisted user or default null
+  // Saved active user session
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('invictus_user');
     return saved ? JSON.parse(saved) : null;
@@ -24,8 +24,9 @@ export const AuthProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const [registeredStudents, setRegisteredStudents] = useState(() => {
-    const saved = localStorage.getItem('invictus_registered_students');
+  // Database of registered user accounts
+  const [registeredAccounts, setRegisteredAccounts] = useState(() => {
+    const saved = localStorage.getItem('invictus_accounts');
     return saved ? JSON.parse(saved) : [];
   });
 
@@ -57,16 +58,8 @@ export const AuthProvider = ({ children }) => {
   }, [teamMembers]);
 
   useEffect(() => {
-    localStorage.setItem('invictus_registered_students', JSON.stringify(registeredStudents));
-  }, [registeredStudents]);
-
-  // Calculate overall progress
-  const totalTasks = roadmapSteps.reduce((acc, step) => acc + step.tasks.length, 0);
-  const completedTasks = roadmapSteps.reduce(
-    (acc, step) => acc + step.tasks.filter(t => t.completed).length, 
-    0
-  );
-  const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+    localStorage.setItem('invictus_accounts', JSON.stringify(registeredAccounts));
+  }, [registeredAccounts]);
 
   const showToast = (msg) => {
     setToastMessage(msg);
@@ -77,57 +70,59 @@ export const AuthProvider = ({ children }) => {
 
   const logout = () => {
     setUser(null);
-    setJoinedProblemId(null);
-    setTeamMembers([]);
     showToast("Logged out successfully");
   };
 
-  const loginCustom = (email, password, role, fullName = "", college = "") => {
+  // Sign Up / Registration
+  const signupAccount = (fullName, email, college, location, password, role) => {
     const isStudentRole = role === 'student';
-    const computedName = fullName.trim() || email.split('@')[0].replace('.', ' ').toUpperCase();
-    
-    const newUserObj = {
-      uid: "usr-" + Date.now(),
-      name: computedName,
-      email,
+    const newAccount = {
+      uid: "acc-" + Date.now(),
+      name: fullName,
+      email: email.trim().toLowerCase(),
+      college: college || (isStudentRole ? "Engineering Institute" : "Tech Partner"),
+      location: location || "India",
+      password: password,
       role: isStudentRole ? 'student' : 'mentor',
       avatar: isStudentRole 
-        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(computedName)}`
-        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(computedName)}`,
-      college: college || (isStudentRole ? "Engineering Institute" : "Tech Industry Partner"),
-      enrolledProblemId: joinedProblemId,
-      teamMembers: teamMembers
+        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(fullName)}`
+        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`
     };
 
-    setUser(newUserObj);
-
-    if (isStudentRole) {
-      setRegisteredStudents(prev => {
-        const exists = prev.some(s => s.email === email);
-        if (!exists) {
-          return [...prev, {
-            id: newUserObj.uid,
-            name: newUserObj.name,
-            email: newUserObj.email,
-            avatar: newUserObj.avatar,
-            college: newUserObj.college,
-            problemId: joinedProblemId || "ps-101",
-            problemTitle: PROBLEM_STATEMENTS.find(p => p.id === joinedProblemId)?.title || "Smart Water Grid Leakage Detection",
-            progressPercent: progressPercent,
-            status: progressPercent === 100 ? "Completed & Verified" : progressPercent > 0 ? "On Track" : "Enrolled",
-            teamName: `${newUserObj.name}'s Team`,
-            teamMembers: [newUserObj.name],
-            tasksCompleted: completedTasks,
-            totalTasks: totalTasks,
-            recentNote: "Registered & ready to start Phase 1."
-          }];
-        }
-        return prev;
-      });
-    }
-
-    showToast(`Signed in as ${newUserObj.name} (${newUserObj.role})`);
+    setRegisteredAccounts(prev => [...prev.filter(a => a.email !== newAccount.email), newAccount]);
+    showToast(`Registration successful! Please Sign In with your Gmail ID and Password.`);
   };
+
+  // Sign In / Login
+  const loginAccount = (email, password, role) => {
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = registeredAccounts.find(
+      a => a.email === cleanEmail && a.role === role
+    );
+
+    const userObj = existing ? existing : {
+      uid: "usr-" + Date.now(),
+      name: cleanEmail.split('@')[0].toUpperCase(),
+      email: cleanEmail,
+      college: role === 'student' ? "Engineering College" : "Tech Mentor",
+      location: "India",
+      role: role,
+      avatar: role === 'student'
+        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanEmail)}`
+        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`
+    };
+
+    setUser(userObj);
+    showToast(`Welcome back, ${userObj.name}! Signed in as ${userObj.role}.`);
+  };
+
+  // Calculate overall progress
+  const totalTasks = roadmapSteps.reduce((acc, step) => acc + step.tasks.length, 0);
+  const completedTasks = roadmapSteps.reduce(
+    (acc, step) => acc + step.tasks.filter(t => t.completed).length, 
+    0
+  );
+  const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
   const toggleTaskCompletion = (taskId) => {
     setRoadmapSteps(prevSteps => 
@@ -146,19 +141,6 @@ export const AuthProvider = ({ children }) => {
     setTeamMembers(updatedMembers);
 
     const problem = PROBLEM_STATEMENTS.find(p => p.id === problemId);
-
-    // Update student's registered student record
-    if (user && user.role === 'student') {
-      setRegisteredStudents(prev => 
-        prev.map(s => s.email === user.email ? {
-          ...s,
-          problemId: problemId,
-          problemTitle: problem?.title || "Problem Statement",
-          teamMembers: updatedMembers
-        } : s)
-      );
-    }
-
     showToast(`Enrolled in: "${problem?.title || 'Problem Statement'}"`);
   };
 
@@ -168,7 +150,8 @@ export const AuthProvider = ({ children }) => {
     <AuthContext.Provider value={{
       user,
       setUser,
-      loginCustom,
+      signupAccount,
+      loginAccount,
       logout,
       roadmapSteps,
       toggleTaskCompletion,
@@ -179,7 +162,7 @@ export const AuthProvider = ({ children }) => {
       activeProblem,
       joinProblemStatement,
       teamMembers,
-      registeredStudents,
+      registeredAccounts,
       toastMessage,
       showToast
     }}>
