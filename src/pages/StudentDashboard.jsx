@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { MOCK_AI_RESPONSES } from '../data/mockData';
 import { 
   CheckCircle2, Circle, Sparkles, Send, Bot, User, Award, 
-  MessageSquare, Video, ArrowRight, ShieldCheck, Zap, FileText 
+  MessageSquare, Video, ArrowRight, ShieldCheck, Zap, FileText, Lock 
 } from 'lucide-react';
 
 export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
@@ -226,9 +226,15 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
                         </span>
                         {step.title}
                       </h3>
-                      {isStepFinished && (
-                        <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full">
+                      {isStepFinished ? (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                          <CheckCircle2 size={12} />
                           Completed Phase
+                        </span>
+                      ) : (
+                        <span className="text-[10px] bg-amber-50 text-amber-700 font-bold px-2.5 py-0.5 rounded-full border border-amber-200 flex items-center gap-1">
+                          <Lock size={10} />
+                          Mentor Sign-Off Required
                         </span>
                       )}
                     </div>
@@ -237,32 +243,55 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
                     </p>
 
                     <div className="space-y-2 pl-8">
-                      {step.tasks.map((task) => (
-                        <label
-                          key={task.id}
-                          onClick={() => toggleTaskCompletion(task.id)}
-                          className={`flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
-                            task.completed
-                              ? 'bg-white border-emerald-200 text-slate-800 shadow-sm'
-                              : 'bg-white border-slate-200 text-slate-700 hover:border-[#1C7293]/40'
-                          }`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={task.completed}
-                            onChange={() => {}}
-                            className="hidden"
-                          />
-                          {task.completed ? (
-                            <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
-                          ) : (
-                            <Circle size={18} className="text-slate-300 shrink-0" />
-                          )}
-                          <span className={`text-xs font-medium ${task.completed ? 'line-through text-slate-400' : ''}`}>
-                            {task.title}
-                          </span>
-                        </label>
-                      ))}
+                      {step.tasks.map((task) => {
+                        const isMentor = user?.role === 'mentor';
+                        return (
+                          <div
+                            key={task.id}
+                            onClick={() => {
+                              if (!isMentor) {
+                                showToast("🔒 Mentor Access Required: Only your assigned mentor can mark phase deliverables as completed.");
+                                return;
+                              }
+                              toggleTaskCompletion(task.id);
+                            }}
+                            className={`flex items-center justify-between p-3 rounded-xl transition-all border ${
+                              !isMentor ? 'cursor-not-allowed' : 'cursor-pointer hover:border-[#1C7293]/40'
+                            } ${
+                              task.completed
+                                ? 'bg-white border-emerald-200 text-slate-800 shadow-sm'
+                                : 'bg-white border-slate-200 text-slate-700'
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <input
+                                type="checkbox"
+                                checked={task.completed}
+                                readOnly
+                                className="hidden"
+                              />
+                              {task.completed ? (
+                                <CheckCircle2 size={18} className="text-emerald-500 shrink-0" />
+                              ) : isMentor ? (
+                                <Circle size={18} className="text-slate-300 shrink-0 hover:text-[#1C7293]" />
+                              ) : (
+                                <div className="w-5 h-5 rounded-full border border-amber-400 bg-amber-50 text-amber-600 flex items-center justify-center shrink-0" title="Mentor Verification Required">
+                                  <Lock size={10} />
+                                </div>
+                              )}
+                              <span className={`text-xs font-medium ${task.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                {task.title}
+                              </span>
+                            </div>
+
+                            {!task.completed && !isMentor && (
+                              <span className="text-[10px] text-amber-700 bg-amber-50 font-semibold px-2 py-0.5 rounded-full border border-amber-200/80 flex items-center gap-1 shrink-0">
+                                <Lock size={9} /> Mentor Approval
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 );

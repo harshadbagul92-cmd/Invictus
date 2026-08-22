@@ -1,9 +1,13 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { PROBLEM_STATEMENTS, INITIAL_ROADMAP_STEPS } from '../data/mockData';
+import { api } from '../lib/api';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
+  // Problems database state (synced with SQLite backend)
+  const [problems, setProblems] = useState(PROBLEM_STATEMENTS);
+
   // Saved active user session
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem('invictus_user');
@@ -24,7 +28,6 @@ export const AuthProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : [];
   });
 
-  // Database of registered user accounts
   const [registeredAccounts, setRegisteredAccounts] = useState(() => {
     const saved = localStorage.getItem('invictus_accounts');
     return saved ? JSON.parse(saved) : [];
@@ -32,7 +35,48 @@ export const AuthProvider = ({ children }) => {
 
   const [toastMessage, setToastMessage] = useState(null);
 
-  // Sync to localStorage
+  // Sync initial problem statements from backend SQLite DB
+  useEffect(() => {
+    async function loadBackendProblems() {
+      const serverProblems = await api.getProblems();
+      if (serverProblems && Array.isArray(serverProblems) && serverProblems.length > 0) {
+        setProblems(serverProblems);
+      }
+    }
+    loadBackendProblems();
+  }, []);
+
+  // Sync user roadmap progress from backend when user logs in
+  useEffect(() => {
+    if (user?.uid) {
+      async function syncUserBackendData() {
+        // Fetch User Enrollment
+        const enrollData = await api.getUserEnrollment(user.uid);
+        if (enrollData?.enrolled && enrollData.enrollment) {
+          setJoinedProblemId(enrollData.enrollment.problem_id);
+          setTeamMembers(enrollData.enrollment.team_members || []);
+        }
+
+        // Fetch User Progress
+        const progressData = await api.getUserRoadmap(user.uid);
+        if (progressData?.completedTaskIds) {
+          const completedSet = new Set(progressData.completedTaskIds);
+          setRoadmapSteps(prevSteps =>
+            prevSteps.map(step => ({
+              ...step,
+              tasks: step.tasks.map(t => ({
+                ...t,
+                completed: completedSet.has(t.id)
+              }))
+            }))
+          );
+        }
+      }
+      syncUserBackendData();
+    }
+  }, [user?.uid]);
+
+  // Sync to localStorage as cache fallback
   useEffect(() => {
     if (user) {
       localStorage.setItem('invictus_user', JSON.stringify(user));
@@ -73,47 +117,46 @@ export const AuthProvider = ({ children }) => {
     showToast("Logged out successfully");
   };
 
-  // Sign Up / Registration
-  const signupAccount = (fullName, email, college, location, password, role) => {
+  // Sign Up / Registration with SQLite DB backend sync
+  const signupAccount = async (fullName, email, college, location, password, role) => {
     const isStudentRole = role === 'student';
-    const newAccount = {
-      uid: "acc-" + Date.now(),
-      name: fullName,
+    const payload = {
+      fullName,
       email: email.trim().toLowerCase(),
       college: college || (isStudentRole ? "Engineering Institute" : "Tech Partner"),
       location: location || "India",
       password: password,
-      role: isStudentRole ? 'student' : 'mentor',
-      avatar: isStudentRole 
-        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(fullName)}`
-        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`
+      role: isStudentRole ? 'student' : 'mentor'
     };
 
-    setRegisteredAccounts(prev => [...prev.filter(a => a.email !== newAccount.email), newAccount]);
-    showToast(`Registration successful! Please Sign In with your Gmail ID and Password.`);
+    try {
+      const result = await api.register(payload);
+      if (result?.user) {
+        setRegisteredAccounts(prev => [...prev.filter(a => a.email !== payload.email), result.user]);
+        showToast(`Registration successful! Please Sign In with your email and password.`);
+        return result.user;
+      }
+    } catch (err) {
+      showToast(`Error: ${err.message || 'Failed to register'}`);
+    }
   };
 
-  // Sign In / Login
-  const loginAccount = (email, password, role) => {
+  // Sign In / Login with SQLite DB backend sync
+  const loginAccount = async (email, password, role) => {
     const cleanEmail = email.trim().toLowerCase();
-    const existing = registeredAccounts.find(
-      a => a.email === cleanEmail && a.role === role
-    );
+    const payload = { email: cleanEmail, password, role };
 
-    const userObj = existing ? existing : {
-      uid: "usr-" + Date.now(),
-      name: cleanEmail.split('@')[0].toUpperCase(),
-      email: cleanEmail,
-      college: role === 'student' ? "Engineering College" : "Tech Mentor",
-      location: "India",
-      role: role,
-      avatar: role === 'student'
-        ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(cleanEmail)}`
-        : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(cleanEmail)}`
-    };
-
-    setUser(userObj);
-    showToast(`Welcome back, ${userObj.name}! Signed in as ${userObj.role}.`);
+    try {
+      const result = await api.login(payload);
+      if (result?.user) {
+        setUser(result.user);
+        showToast(`🎉 Welcome back, ${result.user.name}! Signed in as ${result.user.role}.`);
+        return result.user;
+      }
+    } catch (err) {
+      showToast(`❌ ${err.message || 'Login failed'}`);
+      return null;
+    }
   };
 
   // Calculate overall progress
@@ -124,27 +167,61 @@ export const AuthProvider = ({ children }) => {
   );
   const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
 
-  const toggleTaskCompletion = (taskId) => {
+  // Toggle task completion and sync to SQLite DB (Restricted to Mentor access)
+  const toggleTaskCompletion = async (taskId, targetUserId = null, forceState = null) => {
+    const isMentor = user?.role === 'mentor';
+    if (!isMentor && !targetUserId) {
+      showToast("🔒 Mentor Access Required: Only assigned mentors can mark phase deliverables as completed.");
+      return false;
+    }
+
+    const effectiveUserId = targetUserId || user?.uid;
+    let nextStateCompleted = false;
+
     setRoadmapSteps(prevSteps => 
       prevSteps.map(step => ({
         ...step,
-        tasks: step.tasks.map(t => 
-          t.id === taskId ? { ...t, completed: !t.completed } : t
-        )
+        tasks: step.tasks.map(t => {
+          if (t.id === taskId) {
+            nextStateCompleted = forceState !== null ? forceState : !t.completed;
+            return { ...t, completed: nextStateCompleted };
+          }
+          return t;
+        })
       }))
     );
+
+    if (effectiveUserId) {
+      await api.toggleTask({
+        userId: effectiveUserId,
+        problemId: joinedProblemId || 'ps-101',
+        taskId,
+        completed: nextStateCompleted
+      });
+    }
+    return true;
   };
 
-  const joinProblemStatement = (problemId, mode = "Solo", members = []) => {
+  // Enroll user in Problem Statement and sync to SQLite DB
+  const joinProblemStatement = async (problemId, mode = "Solo", members = []) => {
     setJoinedProblemId(problemId);
     const updatedMembers = members && members.length > 0 ? members : [user ? user.name : "Student"];
     setTeamMembers(updatedMembers);
 
-    const problem = PROBLEM_STATEMENTS.find(p => p.id === problemId);
+    if (user?.uid) {
+      await api.enroll({
+        userId: user.uid,
+        problemId,
+        mode,
+        teamMembers: updatedMembers
+      });
+    }
+
+    const problem = problems.find(p => p.id === problemId) || PROBLEM_STATEMENTS.find(p => p.id === problemId);
     showToast(`Enrolled in: "${problem?.title || 'Problem Statement'}"`);
   };
 
-  const activeProblem = PROBLEM_STATEMENTS.find(p => p.id === joinedProblemId) || null;
+  const activeProblem = problems.find(p => p.id === joinedProblemId) || PROBLEM_STATEMENTS.find(p => p.id === joinedProblemId) || null;
 
   return (
     <AuthContext.Provider value={{
@@ -153,6 +230,7 @@ export const AuthProvider = ({ children }) => {
       signupAccount,
       loginAccount,
       logout,
+      problems,
       roadmapSteps,
       toggleTaskCompletion,
       progressPercent,

@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { 
   Users, CheckCircle2, Clock, BarChart3, ArrowUpRight, 
   Video, MessageSquare, PhoneCall, Sparkles, ChevronRight, UserCheck 
@@ -10,30 +11,40 @@ import {
 } from 'recharts';
 
 export const MentorDashboard = ({ onSelectStudent }) => {
-  const { user, registeredStudents } = useAuth();
+  const { user } = useAuth();
+  const [studentsList, setStudentsList] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const studentsList = registeredStudents && registeredStudents.length > 0 
-    ? registeredStudents 
-    : [];
+  useEffect(() => {
+    async function loadStudents() {
+      setLoading(true);
+      const data = await api.getMentorStudents();
+      if (data && Array.isArray(data)) {
+        setStudentsList(data);
+      }
+      setLoading(false);
+    }
+    loadStudents();
+  }, []);
 
   const chartData = studentsList.map(student => ({
-    name: student.name.split(' ')[0],
-    progress: student.progressPercent || 0,
-    tasks: student.tasksCompleted || 0
+    name: student.name ? student.name.split(' ')[0] : 'Student',
+    progress: student.progress || 0,
+    submissionStatus: student.submissionStatus || 'Pending'
   }));
 
-  const completedCount = studentsList.filter(s => s.progressPercent === 100).length;
-  const onTrackCount = studentsList.filter(s => s.progressPercent > 0 && s.progressPercent < 100).length;
-  const newCount = studentsList.filter(s => s.progressPercent === 0).length;
+  const completedCount = studentsList.filter(s => s.progress === 100 || s.submissionStatus === 'Approved').length;
+  const onTrackCount = studentsList.filter(s => s.progress > 0 && s.progress < 100).length;
+  const newCount = studentsList.filter(s => s.progress === 0).length;
 
   const pieData = [
-    { name: 'Completed', value: completedCount || 0, color: '#10B981' },
+    { name: 'Completed / Approved', value: completedCount || 0, color: '#10B981' },
     { name: 'In Progress', value: onTrackCount || 0, color: '#1C7293' },
     { name: 'New Enrollments', value: newCount || 0, color: '#F59E0B' }
   ];
 
   const avgProgress = studentsList.length > 0 
-    ? Math.round(studentsList.reduce((acc, s) => acc + (s.progressPercent || 0), 0) / studentsList.length) 
+    ? Math.round(studentsList.reduce((acc, s) => acc + (s.progress || 0), 0) / studentsList.length) 
     : 0;
 
   return (
@@ -51,12 +62,13 @@ export const MentorDashboard = ({ onSelectStudent }) => {
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
                 Welcome, {user?.name || 'Mentor'}
               </h1>
-              <span className="bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/30">
-                Verified Reviewer
+              <span className="bg-emerald-500/20 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full border border-emerald-400/30 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                SQLite Backend Synced
               </span>
             </div>
             <p className="text-xs text-sky-200 mt-1">
-              {user?.college || 'Tech Industry Partner'} • Supervising Student Cohort
+              {user?.college || 'Tech Industry Partner'} • Live Student Cohort Review Center
             </p>
           </div>
         </div>
@@ -70,7 +82,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
             <Users size={18} className="text-[#1C7293]" />
           </div>
           <p className="text-3xl font-black text-[#21295C]">{studentsList.length} Registered</p>
-          <p className="text-[11px] text-slate-500 font-medium">Real-time dynamic registrations</p>
+          <p className="text-[11px] text-slate-500 font-medium">Real-time database records</p>
         </div>
 
         <div className="bg-white rounded-2xl p-5 shadow-card border border-slate-100 space-y-2">
@@ -110,7 +122,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
               <BarChart3 size={18} className="text-[#1C7293]" />
               Student Progress Completion (%)
             </h3>
-            <span className="text-xs text-slate-400">Live Workspace Analytics</span>
+            <span className="text-xs text-slate-400">Live Database Analytics</span>
           </div>
 
           {chartData.length > 0 ? (
@@ -134,7 +146,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
           ) : (
             <div className="h-64 w-full flex flex-col items-center justify-center bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-slate-400 text-xs">
               <UserCheck size={32} className="mb-2 text-slate-300" />
-              <span>No student progress data recorded yet. Progress chart populates as students complete roadmap tasks.</span>
+              <span>{loading ? 'Loading database records...' : 'No student progress data recorded yet.'}</span>
             </div>
           )}
         </div>
@@ -190,7 +202,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h3 className="text-xl font-bold text-[#21295C]">Registered Students Roster</h3>
-            <p className="text-xs text-slate-500">Live roster of students working on problem statements</p>
+            <p className="text-xs text-slate-500">Live SQLite Database records of students working on problem statements</p>
           </div>
         </div>
 
@@ -214,14 +226,14 @@ export const MentorDashboard = ({ onSelectStudent }) => {
                         {student.name}
                       </h4>
                       <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full uppercase ${
-                        student.progressPercent === 100
+                        student.submissionStatus === 'Approved'
                           ? 'bg-emerald-100 text-emerald-700'
                           : 'bg-sky-100 text-sky-800'
                       }`}>
-                        {student.status || 'Enrolled'}
+                        {student.submissionStatus || 'Enrolled'}
                       </span>
                     </div>
-                    <p className="text-xs font-semibold text-[#1C7293] mt-0.5">{student.problemTitle}</p>
+                    <p className="text-xs font-semibold text-[#1C7293] mt-0.5">{student.enrolledProblemTitle}</p>
                     <p className="text-[11px] text-slate-400">{student.college} • {student.email}</p>
                   </div>
                 </div>
@@ -230,14 +242,14 @@ export const MentorDashboard = ({ onSelectStudent }) => {
                   <div className="w-36 space-y-1">
                     <div className="flex justify-between text-[11px] font-bold text-slate-600">
                       <span>Progress</span>
-                      <span>{student.progressPercent || 0}%</span>
+                      <span>{student.progress || 0}%</span>
                     </div>
                     <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full ${
-                          student.progressPercent === 100 ? 'bg-emerald-500' : 'bg-[#1C7293]'
+                          student.progress === 100 ? 'bg-emerald-500' : 'bg-[#1C7293]'
                         }`}
-                        style={{ width: `${student.progressPercent || 0}%` }}
+                        style={{ width: `${student.progress || 0}%` }}
                       ></div>
                     </div>
                   </div>
@@ -250,7 +262,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
                       }}
                       className="bg-[#065A82] hover:bg-[#1C7293] text-white p-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shadow-sm"
                     >
-                      <span>Inspect</span>
+                      <span>Inspect & Review</span>
                       <ChevronRight size={16} />
                     </button>
                   </div>
@@ -263,7 +275,7 @@ export const MentorDashboard = ({ onSelectStudent }) => {
             <Users size={36} className="mx-auto text-slate-300 mb-2" />
             <p className="text-slate-600 font-bold text-sm">No Student Registrations Yet</p>
             <p className="text-xs text-slate-400 max-w-sm mx-auto mt-1">
-              When students register and enroll in problem statements, their profiles and live roadmap progress will appear here automatically.
+              When students register and enroll in problem statements, their profiles and live roadmap progress will appear here automatically from the SQLite database.
             </p>
           </div>
         )}

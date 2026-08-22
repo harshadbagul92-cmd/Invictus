@@ -1,36 +1,68 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { INITIAL_ROADMAP_STEPS } from '../data/mockData';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 import { 
   ArrowLeft, Video, Phone, MessageSquare, CheckCircle2, Circle, 
-  Sparkles, ShieldCheck, User, X, Mic, MicOff, VideoOff, Send, Clock 
+  Sparkles, ShieldCheck, User, X, Mic, MicOff, VideoOff, Send, Clock, ExternalLink 
 } from 'lucide-react';
 
 export const MentorStudentDetail = ({ studentId, onBack }) => {
-  const { registeredStudents, showToast } = useAuth();
-  
-  const student = registeredStudents?.find(s => s.id === studentId) || {
-    id: studentId || "std-001",
-    name: "Enrolled Student",
-    problemTitle: "Smart Water Grid Leakage Detection",
-    college: "Engineering Institute",
-    teamName: "Innovation Team",
-    progressPercent: 0,
-    status: "Enrolled",
-    recentNote: "Registered & ready to start Phase 1.",
-    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Student`
-  };
+  const { showToast } = useAuth();
+  const [student, setStudent] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const [activeCallModal, setActiveCallModal] = useState(null); // 'video' | 'voice' | 'chat' | null
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
-  const [callTimer, setCallTimer] = useState("01:24");
+  const [callTimer] = useState("01:24");
+  
   const [feedbackNote, setFeedbackNote] = useState('');
+  const [gradeScore, setGradeScore] = useState(85);
+  const [roadmapSteps, setRoadmapSteps] = useState(INITIAL_ROADMAP_STEPS);
+
+  // Load student detail & roadmap progress from backend SQLite DB
+  useEffect(() => {
+    async function loadStudentData() {
+      setLoading(true);
+      const targetUid = studentId || "std-001";
+      
+      const [students, progressData] = await Promise.all([
+        api.getMentorStudents(),
+        api.getUserRoadmap(targetUid)
+      ]);
+
+      if (students && Array.isArray(students)) {
+        const found = students.find(s => s.id === studentId || s.id === `usr-${studentId}`);
+        if (found) {
+          setStudent(found);
+          if (found.feedback) setFeedbackNote(found.feedback);
+          if (found.score) setGradeScore(found.score);
+        }
+      }
+
+      if (progressData?.completedTaskIds) {
+        const completedSet = new Set(progressData.completedTaskIds);
+        setRoadmapSteps(prevSteps =>
+          prevSteps.map(step => ({
+            ...step,
+            tasks: step.tasks.map(t => ({
+              ...t,
+              completed: completedSet.has(t.id)
+            }))
+          }))
+        );
+      }
+
+      setLoading(false);
+    }
+    loadStudentData();
+  }, [studentId]);
 
   // Live Chat inside Modal State
   const [messages, setMessages] = useState([
-    { sender: 'student', text: `Hi! We completed phase 1 for ${student.problemTitle}. Can you review our architecture diagram?`, time: '10:14 AM' },
-    { sender: 'mentor', text: 'Sure thing! The diagram looks clean. Ensure you handle edge sensor nulls in phase 2.', time: '10:16 AM' }
+    { sender: 'student', text: `Hi! We are working on our prototype. Can you review our database architecture?`, time: '10:14 AM' },
+    { sender: 'mentor', text: 'Sure thing! The SQLite setup looks clean and fast.', time: '10:16 AM' }
   ]);
   const [newMsg, setNewMsg] = useState('');
 
@@ -43,11 +75,91 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
     setNewMsg('');
   };
 
-  const handleSaveFeedback = () => {
-    if (!feedbackNote.trim()) return;
-    showToast(`Feedback note logged for ${student.name}`);
-    setFeedbackNote('');
+  const handleMentorToggleTask = async (taskId, currentCompleted) => {
+    const nextCompleted = !currentCompleted;
+    setRoadmapSteps(prev =>
+      prev.map(step => ({
+        ...step,
+        tasks: step.tasks.map(t => t.id === taskId ? { ...t, completed: nextCompleted } : t)
+      }))
+    );
+
+    const targetUid = student?.id || studentId;
+    await api.toggleTask({
+      userId: targetUid,
+      problemId: student?.enrolledProblemId || 'ps-101',
+      taskId,
+      completed: nextCompleted
+    });
+
+    showToast(nextCompleted ? `✅ Task marked as completed by Mentor!` : `Marked task as pending`);
   };
+
+  const handleMentorTogglePhase = async (step) => {
+    const isPhaseFullyDone = step.tasks.every(t => t.completed);
+    const nextState = !isPhaseFullyDone;
+
+    setRoadmapSteps(prev =>
+      prev.map(s => s.id === step.id ? {
+        ...s,
+        tasks: s.tasks.map(t => ({ ...t, completed: nextState }))
+      } : s)
+    );
+
+    const targetUid = student?.id || studentId;
+    for (const task of step.tasks) {
+      await api.toggleTask({
+        userId: targetUid,
+        problemId: student?.enrolledProblemId || 'ps-101',
+        taskId: task.id,
+        completed: nextState
+      });
+    }
+
+    showToast(nextState ? `🎉 Phase "${step.title}" verified by Mentor!` : `Phase marked as pending`);
+  };
+
+  const handleSaveReview = async (newStatus = 'Reviewed') => {
+    if (!student) return;
+    const res = await api.submitMentorReview({
+      userId: student.id,
+      problemId: student.enrolledProblemId || 'ps-101',
+      score: Number(gradeScore),
+      feedback: feedbackNote || 'Great progress on deliverables!',
+      status: newStatus
+    });
+
+    if (res?.message) {
+      showToast(`Review saved in database for ${student.name}`);
+      setStudent(prev => prev ? { ...prev, submissionStatus: newStatus, score: Number(gradeScore), feedback: feedbackNote } : null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-16 text-center text-slate-500 font-medium">
+        Loading student profile from SQLite database...
+      </div>
+    );
+  }
+
+  const currentStudent = student || {
+    id: studentId || "std-001",
+    name: "Enrolled Student",
+    enrolledProblemTitle: "Smart Water Grid Leakage Detection",
+    college: "Engineering Institute",
+    teamName: "Innovation Team",
+    progress: 0,
+    submissionStatus: "Enrolled",
+    githubUrl: "",
+    demoUrl: "",
+    pitchNotes: "Awaiting submission",
+    avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=Student`
+  };
+
+  const totalTasksCount = roadmapSteps.reduce((acc, step) => acc + step.tasks.length, 0);
+  const completedTasksCount = roadmapSteps.reduce((acc, step) => acc + step.tasks.filter(t => t.completed).length, 0);
+  const liveProgressPercent = totalTasksCount > 0 ? Math.round((completedTasksCount / totalTasksCount) * 100) : (currentStudent.progress || 0);
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 sm:px-6 lg:px-8 space-y-8">
@@ -62,7 +174,7 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
         </button>
 
         <span className="text-xs font-semibold text-slate-400">
-          Student ID: <span className="font-mono text-slate-700">{student.id}</span>
+          Student ID: <span className="font-mono text-slate-700">{currentStudent.id}</span>
         </span>
       </div>
 
@@ -70,19 +182,19 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
         <div className="flex items-center gap-4">
           <img
-            src={student.avatar}
-            alt={student.name}
+            src={currentStudent.avatar}
+            alt={currentStudent.name}
             className="w-16 h-16 rounded-2xl object-cover ring-4 ring-[#1C7293]/30"
           />
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-extrabold text-[#21295C]">{student.name}</h1>
+              <h1 className="text-2xl font-extrabold text-[#21295C]">{currentStudent.name}</h1>
               <span className="text-xs font-bold bg-emerald-100 text-emerald-700 px-2.5 py-0.5 rounded-full">
-                {student.status || 'Enrolled'}
+                {currentStudent.submissionStatus || 'Enrolled'}
               </span>
             </div>
-            <p className="text-xs font-semibold text-[#1C7293] mt-0.5">{student.problemTitle}</p>
-            <p className="text-xs text-slate-400">{student.college} • {student.teamName}</p>
+            <p className="text-xs font-semibold text-[#1C7293] mt-0.5">{currentStudent.enrolledProblemTitle}</p>
+            <p className="text-xs text-slate-400">{currentStudent.college} • {currentStudent.email}</p>
           </div>
         </div>
 
@@ -121,47 +233,98 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
           <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-card border border-slate-100 space-y-6">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <h3 className="text-lg font-bold text-[#21295C]">Roadmap Progress Breakdown</h3>
-                <p className="text-xs text-slate-500">Mentee task completion history</p>
+                <h3 className="text-lg font-bold text-[#21295C] flex items-center gap-2">
+                  <ShieldCheck size={20} className="text-[#1C7293]" />
+                  Roadmap Progress & Mentor Sign-Off
+                </h3>
+                <p className="text-xs text-slate-500">Click deliverables to check/tick completed tasks for this mentee</p>
               </div>
               <div className="text-right">
-                <span className="text-2xl font-black text-[#1C7293]">{student.progressPercent || 0}%</span>
-                <span className="text-xs text-slate-400 block font-semibold">Completed</span>
+                <span className="text-2xl font-black text-[#1C7293]">{liveProgressPercent}%</span>
+                <span className="text-xs text-slate-400 block font-semibold">{completedTasksCount} of {totalTasksCount} Verified</span>
               </div>
             </div>
 
             <div className="space-y-4">
-              {INITIAL_ROADMAP_STEPS.map((step, idx) => (
-                <div key={step.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-bold text-xs text-[#21295C] flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-full bg-[#065A82] text-white flex items-center justify-center text-[10px]">
-                        {idx + 1}
-                      </span>
-                      {step.title}
-                    </h4>
-                  </div>
-                  <div className="space-y-1.5 pl-7">
-                    {step.tasks.map(task => (
-                      <div key={task.id} className="flex items-center justify-between text-xs text-slate-700">
-                        <span className="flex items-center gap-2">
-                          {task.completed ? (
-                            <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
-                          ) : (
-                            <Circle size={14} className="text-slate-300 shrink-0" />
-                          )}
-                          <span className={task.completed ? 'text-slate-800 font-medium' : 'text-slate-400'}>
-                            {task.title}
+              {roadmapSteps.map((step, idx) => {
+                const isStepFinished = step.tasks.every(t => t.completed);
+                return (
+                  <div key={step.id} className={`p-4 rounded-2xl border transition-all ${
+                    isStepFinished ? 'bg-emerald-50/40 border-emerald-200' : 'bg-slate-50 border-slate-200/80'
+                  }`}>
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-bold text-xs text-[#21295C] flex items-center gap-2">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                          isStepFinished ? 'bg-emerald-500 text-white' : 'bg-[#065A82] text-white'
+                        }`}>
+                          {idx + 1}
+                        </span>
+                        {step.title}
+                      </h4>
+                      
+                      <button
+                        onClick={() => handleMentorTogglePhase(step)}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all flex items-center gap-1.5 ${
+                          isStepFinished 
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200' 
+                            : 'bg-white text-[#065A82] border-[#065A82]/30 hover:bg-slate-100'
+                        }`}
+                      >
+                        {isStepFinished ? (
+                          <>
+                            <CheckCircle2 size={13} className="text-emerald-600" />
+                            Phase Verified
+                          </>
+                        ) : (
+                          <>
+                            <Circle size={13} className="text-[#065A82]" />
+                            Mark Phase Completed
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="space-y-2 pl-7">
+                      {step.tasks.map(task => (
+                        <div
+                          key={task.id}
+                          onClick={() => handleMentorToggleTask(task.id, task.completed)}
+                          className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${
+                            task.completed
+                              ? 'bg-white border-emerald-200 text-slate-800 shadow-xs'
+                              : 'bg-white border-slate-200 hover:border-[#1C7293]/40 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={task.completed}
+                              readOnly
+                              className="hidden"
+                            />
+                            {task.completed ? (
+                              <CheckCircle2 size={16} className="text-emerald-500 shrink-0" />
+                            ) : (
+                              <Circle size={16} className="text-slate-300 shrink-0 hover:text-[#1C7293]" />
+                            )}
+                            <span className={`text-xs font-medium ${task.completed ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                              {task.title}
+                            </span>
+                          </div>
+
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                            task.completed
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                              : 'bg-slate-100 text-slate-500 border border-slate-200'
+                          }`}>
+                            {task.completed ? 'Approved' : 'Click to Verify'}
                           </span>
-                        </span>
-                        <span className={`text-[10px] font-bold ${task.completed ? 'text-emerald-600' : 'text-slate-400'}`}>
-                          {task.completed ? 'Verified' : 'Pending'}
-                        </span>
-                      </div>
-                    ))}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -171,17 +334,26 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
           <div className="bg-white rounded-3xl p-6 shadow-card border border-slate-100 space-y-4">
             <h3 className="text-sm font-bold text-[#21295C] flex items-center gap-2">
               <Sparkles size={16} className="text-[#1C7293]" />
-              Mentor Feedback & Review Log
+              Mentor Feedback & Score Log
             </h3>
 
-            <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 text-xs text-slate-700">
-              <p className="font-semibold text-[#065A82] mb-1">Recent Student Note:</p>
-              <p className="italic">{student.recentNote || 'Awaiting mentor review.'}</p>
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                Score / Evaluation Rating (0 - 100)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                value={gradeScore}
+                onChange={(e) => setGradeScore(e.target.value)}
+                className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-[#1C7293]"
+              />
             </div>
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Add Guidance Note for Mentee
+                Guidance Note for Mentee
               </label>
               <textarea
                 rows={4}
@@ -193,10 +365,10 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
             </div>
 
             <button
-              onClick={handleSaveFeedback}
+              onClick={() => handleSaveReview('Reviewed')}
               className="w-full bg-[#065A82] hover:bg-[#1C7293] text-white py-2.5 rounded-xl font-bold text-xs shadow-md transition-colors"
             >
-              Post Feedback to Student Dashboard
+              Post Feedback to SQLite Database
             </button>
           </div>
 
@@ -210,7 +382,7 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
               Once you approve the final prototype, the student receives their verified Invictus certificate and internship fast-track badge.
             </p>
             <button
-              onClick={() => showToast(`Signed off on ${student.name}'s final submission!`)}
+              onClick={() => handleSaveReview('Approved')}
               className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2.5 rounded-xl text-xs shadow-md transition-colors"
             >
               Approve Prototype & Issue Certificate
@@ -231,7 +403,7 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
                 </div>
                 <div>
                   <h3 className="font-bold text-base text-[#21295C] capitalize">
-                    {activeCallModal} Call — {student.name}
+                    {activeCallModal} Call — {currentStudent.name}
                   </h3>
                   <p className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
@@ -253,8 +425,8 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
               <div className="bg-slate-900 rounded-2xl h-64 relative overflow-hidden flex items-center justify-center">
                 {!isVideoOff ? (
                   <img
-                    src={student.avatar}
-                    alt={student.name}
+                    src={currentStudent.avatar}
+                    alt={currentStudent.name}
                     className="w-full h-full object-cover opacity-90"
                   />
                 ) : (
@@ -274,12 +446,12 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
             {activeCallModal === 'voice' && (
               <div className="bg-gradient-to-br from-[#21295C] to-[#065A82] rounded-2xl p-12 text-center text-white space-y-4">
                 <img
-                  src={student.avatar}
-                  alt={student.name}
+                  src={currentStudent.avatar}
+                  alt={currentStudent.name}
                   className="w-24 h-24 rounded-full object-cover mx-auto ring-4 ring-white/30"
                 />
                 <div>
-                  <h4 className="font-bold text-lg">{student.name}</h4>
+                  <h4 className="font-bold text-lg">{currentStudent.name}</h4>
                   <p className="text-xs text-sky-200">Encrypted Voice Channel</p>
                 </div>
               </div>
