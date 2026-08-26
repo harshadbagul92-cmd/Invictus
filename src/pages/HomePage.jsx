@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   Shield, ArrowRight, Sparkles, CheckCircle2, Award, Users, 
-  Bot, Building, Code2, Zap, Target, BookOpen, ChevronRight, Lock
+  Bot, Building, Code2, Zap, Target, BookOpen, ChevronRight, Lock, User 
 } from 'lucide-react';
 import { PROBLEM_STATEMENTS } from '../data/mockData';
 
