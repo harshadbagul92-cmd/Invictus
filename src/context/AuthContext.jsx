@@ -117,12 +117,13 @@ export const AuthProvider = ({ children }) => {
     showToast("Logged out successfully");
   };
 
-  // Sign Up / Registration with SQLite DB backend sync
+  // Sign Up / Registration with SQLite DB backend sync & fallback
   const signupAccount = async (fullName, email, college, location, password, role) => {
     const isStudentRole = role === 'student';
+    const cleanEmail = email.trim().toLowerCase();
     const payload = {
       fullName,
-      email: email.trim().toLowerCase(),
+      email: cleanEmail,
       college: college || (isStudentRole ? "Engineering Institute" : "Tech Partner"),
       location: location || "India",
       password: password,
@@ -132,16 +133,39 @@ export const AuthProvider = ({ children }) => {
     try {
       const result = await api.register(payload);
       if (result?.user) {
-        setRegisteredAccounts(prev => [...prev.filter(a => a.email !== payload.email), result.user]);
-        showToast(`Registration successful! Please Sign In with your email and password.`);
+        setRegisteredAccounts(prev => [...prev.filter(a => a.email !== cleanEmail), result.user]);
+        setUser(result.user);
+        showToast(`🎉 Registration successful! Welcome to Invictus, ${result.user.name}.`);
         return result.user;
       }
     } catch (err) {
-      showToast(`Error: ${err.message || 'Failed to register'}`);
+      if (err.message && err.message.includes('already exists')) {
+        showToast(`❌ ${err.message}`);
+        return null;
+      }
+
+      // Offline / Static deployment fallback
+      const fallbackUser = {
+        uid: 'acc-' + Date.now(),
+        name: fullName,
+        email: cleanEmail,
+        college: payload.college,
+        location: payload.location,
+        password: password,
+        role: payload.role,
+        avatar: isStudentRole 
+          ? `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(fullName)}`
+          : `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(fullName)}`
+      };
+
+      setRegisteredAccounts(prev => [...prev.filter(a => a.email !== cleanEmail), fallbackUser]);
+      setUser(fallbackUser);
+      showToast(`🎉 Account created! Welcome, ${fullName}.`);
+      return fallbackUser;
     }
   };
 
-  // Sign In / Login with SQLite DB backend sync
+  // Sign In / Login with SQLite DB backend sync & fallback
   const loginAccount = async (email, password, role) => {
     const cleanEmail = email.trim().toLowerCase();
     const payload = { email: cleanEmail, password, role };
@@ -154,6 +178,19 @@ export const AuthProvider = ({ children }) => {
         return result.user;
       }
     } catch (err) {
+      // Check if user exists in local accounts fallback
+      const localAccount = registeredAccounts.find(a => a.email === cleanEmail && a.role === role);
+      if (localAccount) {
+        if (localAccount.password === password) {
+          setUser(localAccount);
+          showToast(`🎉 Welcome back, ${localAccount.name}!`);
+          return localAccount;
+        } else {
+          showToast(`❌ Incorrect password! Please check your credentials.`);
+          return null;
+        }
+      }
+
       showToast(`❌ ${err.message || 'Login failed'}`);
       return null;
     }

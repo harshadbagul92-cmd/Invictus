@@ -36,7 +36,11 @@ export const AuthPage = ({ setCurrentTab }) => {
     if (resUser) {
       setConfirmPassword('');
       setPassword('');
-      setMode('login'); // Pre-fills registered Email and switches to Sign In mode
+      if (role === 'student') {
+        setCurrentTab('problems');
+      } else {
+        setCurrentTab('mentor-dashboard');
+      }
     }
   };
 
