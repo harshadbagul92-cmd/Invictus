@@ -380,7 +380,7 @@ app.post('/api/mentor/review', (req, res) => {
 });
 
 // -------------------------------------------------------------
-// 6. AI MENTOR CHAT PROXY ENDPOINT
+// 6. AI MENTOR CHAT PROXY ENDPOINT (Powered by Gemini API)
 // -------------------------------------------------------------
 app.post('/api/ai/chat', async (req, res) => {
   try {
@@ -390,38 +390,38 @@ app.post('/api/ai/chat', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const openAiApiKey = process.env.OPENAI_API_KEY;
+    const geminiApiKey = process.env.GEMINI_API_KEY;
 
-    if (openAiApiKey) {
+    if (geminiApiKey) {
       try {
         const fetch = (await import('node-fetch')).default || globalThis.fetch;
-        const aiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        const systemPrompt = `You are the Invictus AI Coding & System Architecture Mentor. You guide university students working on real-world government & corporate problem statements (Context: "${problemContext || 'General Hackathon Prototype'}"). Provide encouraging, technical, actionable, and structured guidance in 3-4 sentences max.`;
+
+        const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiApiKey}`, {
           method: 'POST',
           headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${openAiApiKey}`
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            model: 'gpt-3.5-turbo',
-            messages: [
+            contents: [
               {
-                role: 'system',
-                content: `You are the Invictus AI Coding & System Architecture Mentor. You guide university students working on real-world government & corporate problem statements (Context: "${problemContext || 'General Hackathon Prototype'}"). Provide encouraging, technical, actionable, and structured guidance in 3-4 sentences max.`
-              },
-              { role: 'user', content: message }
-            ],
-            temperature: 0.7,
-            max_tokens: 250
+                parts: [
+                  { text: `${systemPrompt}\n\nStudent Question: ${message}` }
+                ]
+              }
+            ]
           })
         });
 
         if (aiResponse.ok) {
           const data = await aiResponse.json();
-          const replyText = data.choices[0]?.message?.content;
-          return res.json({ reply: replyText, source: 'openai' });
+          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (replyText) {
+            return res.json({ reply: replyText, source: 'gemini-3.6-flash' });
+          }
         }
       } catch (err) {
-        console.warn('OpenAI API call failed, falling back to local AI engine:', err.message);
+        console.warn('Gemini API call failed, falling back to smart knowledge base:', err.message);
       }
     }
 

@@ -53,16 +53,40 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
 
       if (response.ok) {
         const data = await response.json();
-        setChatMessages(prev => [...prev, {
-          sender: 'ai',
-          text: data.reply || data.message,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        }]);
-        setIsTyping(false);
-        return;
+        if (data.reply || data.message) {
+          setChatMessages(prev => [...prev, {
+            sender: 'ai',
+            text: data.reply || data.message,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          }]);
+          setIsTyping(false);
+          return;
+        }
       }
     } catch (e) {
-      // Fallback
+      // Try direct Gemini API call as static deployment fallback
+      try {
+        const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+        const systemPrompt = `You are the Invictus AI Coding & System Architecture Mentor. You guide university students working on real-world government & corporate problem statements (Context: "${activeProblem?.title || 'Invictus Challenge'}"). Provide encouraging, technical, actionable, and structured guidance in 3-4 sentences max.`;
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nQuestion: ${prompt}` }] }] })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (replyText) {
+            setChatMessages(prev => [...prev, {
+              sender: 'ai',
+              text: replyText,
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            }]);
+            setIsTyping(false);
+            return;
+          }
+        }
+      } catch (geminiErr) {}
     }
 
     setTimeout(() => {
