@@ -44,11 +44,42 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
     setInputMsg('');
     setIsTyping(true);
 
+    // Build comprehensive student profile, progress & work gap context
+    const pendingGaps = (roadmapSteps || [])
+      .flatMap(phase => phase.tasks || [])
+      .filter(task => !task.completed)
+      .map(task => task.title);
+
+    const studentContext = {
+      studentName: user?.name || 'Student',
+      email: user?.email || '',
+      college: user?.college || 'University',
+      location: user?.location || 'India',
+      problemTitle: activeProblem?.title || 'Invictus Challenge',
+      problemCategory: activeProblem?.category || 'Tech',
+      organization: activeProblem?.organization || 'Partner',
+      progressPercent: progressPercent || 0,
+      completedTasksCount: completedTasks || 0,
+      totalTasksCount: totalTasks || 0,
+      pendingGaps: pendingGaps,
+      roadmapPhases: (roadmapSteps || []).map(p => ({
+        phaseId: p.phaseId,
+        title: p.title,
+        completed: p.completed,
+        mentorSignoff: p.mentorSignoff,
+        tasks: (p.tasks || []).map(t => ({ title: t.title, completed: t.completed }))
+      }))
+    };
+
     try {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt, problemContext: activeProblem?.title || 'Invictus Challenge' })
+        body: JSON.stringify({ 
+          message: prompt, 
+          problemContext: activeProblem?.title || 'Invictus Challenge',
+          studentContext
+        })
       });
 
       if (response.ok) {
@@ -67,11 +98,13 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
       // Try direct Gemini API call as static deployment fallback
       try {
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY || ("AQ" + "." + "Ab8RN6J6xl-Q1YPgVUO5oWgxtGKbGij71aCXjJ3_rxXpaPstMA");
-        const systemPrompt = `You are the Invictus AI Coding & System Architecture Mentor. You guide university students working on real-world government & corporate problem statements (Context: "${activeProblem?.title || 'Invictus Challenge'}"). Provide encouraging, technical, actionable, and structured guidance in 3-4 sentences max.`;
+        const contextSummary = `Student: ${studentContext.studentName} (${studentContext.college}). Progress: ${studentContext.progressPercent}% (${studentContext.completedTasksCount}/${studentContext.totalTasksCount} tasks). Active Challenge: "${studentContext.problemTitle}". Work Gaps (Pending Tasks): ${pendingGaps.join(', ') || 'None'}.`;
+        const systemPrompt = `You are the Invictus AI Coding & System Architecture Mentor. You have full access to the student profile, current progress, and work gaps.\n${contextSummary}\nProvide encouraging, technical, actionable, and personalized guidance in 3-4 sentences max.`;
+
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nQuestion: ${prompt}` }] }] })
+          body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\nStudent Question: ${prompt}` }] }] })
         });
         if (res.ok) {
           const data = await res.json();
