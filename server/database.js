@@ -17,6 +17,7 @@ export function initDb() {
       uid TEXT UNIQUE NOT NULL,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
+      phone TEXT,
       password TEXT NOT NULL,
       college TEXT,
       location TEXT,
@@ -25,6 +26,12 @@ export function initDb() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  try {
+    db.exec(`ALTER TABLE users ADD COLUMN phone TEXT;`);
+  } catch (e) {
+    // Column already exists
+  }
 
   // Problem Statements Table
   db.exec(`

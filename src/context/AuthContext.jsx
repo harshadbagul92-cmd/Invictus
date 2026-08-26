@@ -118,12 +118,13 @@ export const AuthProvider = ({ children }) => {
   };
 
   // Sign Up / Registration with SQLite DB backend sync & fallback
-  const signupAccount = async (fullName, email, college, location, password, role) => {
+  const signupAccount = async (fullName, email, phone, college, location, password, role) => {
     const isStudentRole = role === 'student';
     const cleanEmail = email.trim().toLowerCase();
     const payload = {
       fullName,
       email: cleanEmail,
+      phone: phone ? phone.trim() : '',
       college: college || (isStudentRole ? "Engineering Institute" : "Tech Partner"),
       location: location || "India",
       password: password,
@@ -149,6 +150,7 @@ export const AuthProvider = ({ children }) => {
         uid: 'acc-' + Date.now(),
         name: fullName,
         email: cleanEmail,
+        phone: payload.phone,
         college: payload.college,
         location: payload.location,
         password: password,

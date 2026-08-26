@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, User, UserCheck, ArrowRight, Lock, Mail, Building, MapPin, CheckCircle2 } from 'lucide-react';
+import { Shield, User, UserCheck, ArrowRight, Lock, Mail, Building, MapPin, CheckCircle2, Phone } from 'lucide-react';
 
 export const AuthPage = ({ setCurrentTab }) => {
   const { signupAccount, loginAccount, showToast } = useAuth();
@@ -9,6 +9,7 @@ export const AuthPage = ({ setCurrentTab }) => {
 
   // Form states
   const [fullName, setFullName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [college, setCollege] = useState('');
   const [location, setLocation] = useState('');
@@ -17,8 +18,8 @@ export const AuthPage = ({ setCurrentTab }) => {
 
   const handleSignupSubmit = async (e) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim() || !college.trim() || !location.trim() || !password.trim() || !confirmPassword.trim()) {
-      showToast("⚠️ Please fill in all 5 required fields (Full Name, College, Email, Location, Password & Confirmation).");
+    if (!fullName.trim() || !phone.trim() || !email.trim() || !college.trim() || !location.trim() || !password.trim() || !confirmPassword.trim()) {
+      showToast("⚠️ Please fill in all required fields including Mobile Number.");
       return;
     }
 
@@ -32,7 +33,7 @@ export const AuthPage = ({ setCurrentTab }) => {
       return;
     }
 
-    const resUser = await signupAccount(fullName, email, college, location, password, role);
+    const resUser = await signupAccount(fullName, email, phone, college, location, password, role);
     if (resUser) {
       setConfirmPassword('');
       setPassword('');
@@ -119,6 +120,24 @@ export const AuthPage = ({ setCurrentTab }) => {
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                   placeholder="e.g. Aarav Sharma"
+                  className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1C7293] font-medium"
+                />
+              </div>
+            </div>
+
+            {/* 2. Mobile / Phone Number */}
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+                Mobile / Phone Number
+              </label>
+              <div className="relative">
+                <Phone size={16} className="absolute left-3.5 top-3 text-slate-400" />
+                <input
+                  type="tel"
+                  required
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="e.g. +91 9876543210"
                   className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1C7293] font-medium"
                 />
               </div>

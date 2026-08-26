@@ -39,12 +39,13 @@ app.get('/api/health', (req, res) => {
 // Sign Up / Register
 app.post('/api/auth/register', (req, res) => {
   try {
-    const { fullName, email, college, location, password, role } = req.body;
+    const { fullName, email, phone, college, location, password, role } = req.body;
     if (!fullName || !email || !password) {
       return res.status(400).json({ error: 'Full name, email, and password are required' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
+    const userPhone = phone ? phone.trim() : '';
     
     // Check if an account with this email address already exists
     const existingCheck = db.prepare(`SELECT * FROM users WHERE email = ?`).get(cleanEmail);
@@ -63,13 +64,13 @@ app.post('/api/auth/register', (req, res) => {
     const userLocation = location || 'India';
 
     const insertStmt = db.prepare(`
-      INSERT INTO users (uid, name, email, password, college, location, role, avatar)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO users (uid, name, email, phone, password, college, location, role, avatar)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
-    insertStmt.run(uid, fullName, cleanEmail, password, userCollege, userLocation, userRole, avatar);
+    insertStmt.run(uid, fullName, cleanEmail, userPhone, password, userCollege, userLocation, userRole, avatar);
 
-    const user = { uid, name: fullName, email: cleanEmail, college: userCollege, location: userLocation, role: userRole, avatar };
+    const user = { uid, name: fullName, email: cleanEmail, phone: userPhone, college: userCollege, location: userLocation, role: userRole, avatar };
     return res.status(201).json({ message: 'User registered successfully', user });
   } catch (error) {
     if (error.message?.includes('UNIQUE constraint failed')) {
