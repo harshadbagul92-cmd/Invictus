@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
+import { HomePage } from './pages/HomePage';
 import { AuthPage } from './pages/AuthPage';
 import { ProblemList } from './pages/ProblemList';
 import { ProblemDetail } from './pages/ProblemDetail';
@@ -12,14 +13,14 @@ import { MentorStudentDetail } from './pages/MentorStudentDetail';
 
 const AppContent = () => {
   const { user } = useAuth();
-  const [currentTab, setCurrentTab] = useState(() => user ? (user.role === 'mentor' ? 'mentor-dashboard' : 'problems') : 'auth');
+  const [currentTab, setCurrentTab] = useState(() => user ? (user.role === 'mentor' ? 'mentor-dashboard' : 'problems') : 'home');
   const [selectedProblemId, setSelectedProblemId] = useState('ps-101');
   const [selectedStudentId, setSelectedStudentId] = useState(null);
 
   // If user logs out or logs in, adjust active tab
   useEffect(() => {
-    if (!user && currentTab !== 'auth' && currentTab !== 'problems' && currentTab !== 'problem-detail') {
-      setCurrentTab('auth');
+    if (!user && currentTab !== 'home' && currentTab !== 'auth' && currentTab !== 'problems' && currentTab !== 'problem-detail') {
+      setCurrentTab('home');
     }
   }, [user]);
 
@@ -38,6 +39,14 @@ const AppContent = () => {
       <Navbar currentTab={currentTab} setCurrentTab={setCurrentTab} />
 
       <main className="flex-1 pb-16">
+        {currentTab === 'home' && (
+          <HomePage
+            onNavigateProblems={() => setCurrentTab('problems')}
+            onNavigateAuth={() => setCurrentTab('auth')}
+            onSelectProblem={handleSelectProblem}
+          />
+        )}
+
         {currentTab === 'auth' && (
           <AuthPage setCurrentTab={setCurrentTab} />
         )}

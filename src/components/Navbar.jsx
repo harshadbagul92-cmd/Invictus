@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
-import { Shield, User, Award, LayoutDashboard, FileText, LogOut, Users, UserCheck } from 'lucide-react';
+import { Shield, User, Award, LayoutDashboard, FileText, LogOut, Users, UserCheck, Home } from 'lucide-react';
 
 export const Navbar = ({ currentTab, setCurrentTab }) => {
   const { user, logout, progressPercent } = useAuth();
@@ -11,7 +11,7 @@ export const Navbar = ({ currentTab, setCurrentTab }) => {
         <div className="flex items-center justify-between h-16">
           {/* Brand Logo */}
           <div 
-            onClick={() => setCurrentTab('problems')} 
+            onClick={() => setCurrentTab('home')} 
             className="flex items-center gap-3 cursor-pointer group"
           >
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-[#1C7293] to-sky-400 flex items-center justify-center shadow-lg shadow-[#1C7293]/30 group-hover:scale-105 transition-transform">
@@ -32,6 +32,18 @@ export const Navbar = ({ currentTab, setCurrentTab }) => {
 
           {/* Navigation Links */}
           <nav className="hidden md:flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+            <button
+              onClick={() => setCurrentTab('home')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                currentTab === 'home'
+                  ? 'bg-[#1C7293] text-white shadow-md'
+                  : 'text-slate-200 hover:text-white hover:bg-white/10'
+              }`}
+            >
+              <Home size={16} />
+              Home
+            </button>
+
             <button
               onClick={() => setCurrentTab('problems')}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
