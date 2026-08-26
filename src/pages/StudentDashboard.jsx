@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { MOCK_AI_RESPONSES } from '../data/mockData';
+import { api } from '../lib/api';
 import { 
   CheckCircle2, Circle, Sparkles, Send, Bot, User, Award, 
-  MessageSquare, Video, ArrowRight, ShieldCheck, Zap, FileText, Lock 
+  MessageSquare, Video, ArrowRight, ShieldCheck, Zap, FileText, Lock, X 
 } from 'lucide-react';
 
 export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
@@ -22,6 +23,82 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
   ]);
   const [inputMsg, setInputMsg] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+
+  // Human Mentor Messaging Modal state
+  const [isMentorModalOpen, setIsMentorModalOpen] = useState(false);
+  const [mentorMessages, setMentorMessages] = useState([]);
+  const [mentorMsgInput, setMentorMsgInput] = useState('');
+
+  // Load Human Mentor Messages
+  useEffect(() => {
+    if (user?.uid && isMentorModalOpen) {
+      async function loadMentorMessages() {
+        const res = await api.getMessages(user.uid);
+        if (res?.messages && Array.isArray(res.messages) && res.messages.length > 0) {
+          setMentorMessages(res.messages);
+        } else {
+          const saved = localStorage.getItem(`invictus_messages_${user.uid}`);
+          if (saved) {
+            setMentorMessages(JSON.parse(saved));
+          } else {
+            setMentorMessages([
+              {
+                sender_role: 'mentor',
+                sender_name: activeProblem?.assignedMentor?.name || 'Mentor',
+                text: `Hello ${user?.name || 'Student'}! I am your assigned mentor. Feel free to ask me any questions about your project roadmap or review requirements!`,
+                created_at: 'Just now'
+              }
+            ]);
+          }
+        }
+      }
+      loadMentorMessages();
+    }
+  }, [user, isMentorModalOpen, activeProblem]);
+
+  const handleSendMentorMessage = async () => {
+    if (!mentorMsgInput.trim() || !activeProblem?.assignedMentor) return;
+
+    const newMsgObj = {
+      sender_uid: user?.uid || 'std-001',
+      sender_name: user?.name || 'Student',
+      sender_role: 'student',
+      receiver_uid: activeProblem.assignedMentor.uid || 'men-001',
+      receiver_name: activeProblem.assignedMentor.name,
+      problem_id: activeProblem.id,
+      text: mentorMsgInput.trim(),
+      created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    const updated = [...mentorMessages, newMsgObj];
+    setMentorMessages(updated);
+    localStorage.setItem(`invictus_messages_${user?.uid}`, JSON.stringify(updated));
+    setMentorMsgInput('');
+
+    try {
+      await api.sendMessage(newMsgObj);
+    } catch (e) {}
+
+    showToast(`✉️ Message sent to ${activeProblem.assignedMentor.name}!`);
+
+    // Mentor acknowledgement simulation after 3s
+    setTimeout(() => {
+      const ackMsg = {
+        sender_uid: activeProblem.assignedMentor.uid || 'men-001',
+        sender_name: activeProblem.assignedMentor.name,
+        sender_role: 'mentor',
+        receiver_uid: user?.uid || 'std-001',
+        receiver_name: user?.name || 'Student',
+        text: `Thanks for reaching out, ${user?.name || 'Student'}! I will review your latest milestone submission and get back to you shortly.`,
+        created_at: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMentorMessages(prev => {
+        const next = [...prev, ackMsg];
+        localStorage.setItem(`invictus_messages_${user?.uid}`, JSON.stringify(next));
+        return next;
+      });
+    }, 2500);
+  };
 
   const suggestedPrompts = [
     "How should I structure my database schema?",
@@ -466,15 +543,15 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
 
               <div className="grid grid-cols-2 gap-2">
                 <button 
-                  onClick={() => showToast(`Requested review with ${activeProblem.assignedMentor.name}`)}
-                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                  onClick={() => setIsMentorModalOpen(true)}
+                  className="bg-[#065A82] hover:bg-[#1C7293] text-white p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
                 >
                   <MessageSquare size={13} />
-                  Message
+                  Message Mentor
                 </button>
                 <button 
                   onClick={() => showToast(`Video call invite sent to ${activeProblem.assignedMentor.name}`)}
-                  className="bg-[#065A82] hover:bg-[#1C7293] text-white p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm"
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                 >
                   <Video size={13} />
                   Video Call
@@ -484,6 +561,78 @@ export const StudentDashboard = ({ onNavigateRewards, onNavigateProblems }) => {
           )}
         </div>
       </div>
+
+      {/* Human Mentor Messaging Modal */}
+      {isMentorModalOpen && activeProblem?.assignedMentor && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[560px] animate-in fade-in zoom-in duration-200">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#21295C] to-[#065A82] p-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <img
+                  src={activeProblem.assignedMentor.avatar}
+                  alt={activeProblem.assignedMentor.name}
+                  className="w-10 h-10 rounded-xl object-cover ring-2 ring-white/30"
+                />
+                <div>
+                  <h3 className="font-bold text-sm flex items-center gap-2">
+                    {activeProblem.assignedMentor.name}
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+                  </h3>
+                  <p className="text-[11px] text-sky-200">{activeProblem.assignedMentor.title}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsMentorModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Message History */}
+            <div className="flex-1 p-4 overflow-y-auto space-y-3 custom-scrollbar bg-slate-50">
+              {mentorMessages.map((m, idx) => (
+                <div
+                  key={idx}
+                  className={`flex flex-col ${m.sender_role === 'student' ? 'items-end' : 'items-start'}`}
+                >
+                  <div className={`p-3 rounded-2xl text-xs max-w-[85%] leading-relaxed ${
+                    m.sender_role === 'student'
+                      ? 'bg-[#065A82] text-white rounded-tr-none shadow-sm'
+                      : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-none shadow-sm'
+                  }`}>
+                    <p className="font-bold text-[10px] opacity-75 mb-0.5">{m.sender_name || (m.sender_role === 'student' ? 'You' : 'Mentor')}</p>
+                    {m.text}
+                  </div>
+                  <span className="text-[9px] text-slate-400 px-1 mt-1 block">
+                    {m.created_at || m.timestamp || 'Just now'}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Message Input Footer */}
+            <div className="p-3 bg-white border-t border-slate-100 flex items-center gap-2">
+              <input
+                type="text"
+                value={mentorMsgInput}
+                onChange={(e) => setMentorMsgInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSendMentorMessage()}
+                placeholder={`Type a message to ${activeProblem.assignedMentor.name}...`}
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-[#1C7293]"
+              />
+              <button
+                onClick={handleSendMentorMessage}
+                className="bg-[#065A82] hover:bg-[#1C7293] text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-md flex items-center gap-1.5"
+              >
+                <span>Send</span>
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

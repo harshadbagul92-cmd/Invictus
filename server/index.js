@@ -380,6 +380,53 @@ app.post('/api/mentor/review', (req, res) => {
 });
 
 // -------------------------------------------------------------
+// 5.5 MENTOR MESSAGING ENDPOINTS
+// -------------------------------------------------------------
+
+// Send message to mentor / student
+app.post('/api/messages', (req, res) => {
+  try {
+    const { senderUid, senderName, senderRole, receiverUid, receiverName, problemId, text } = req.body;
+    if (!senderUid || !receiverUid || !text) {
+      return res.status(400).json({ error: 'senderUid, receiverUid, and text are required' });
+    }
+
+    const stmt = db.prepare(`
+      INSERT INTO messages (sender_uid, sender_name, sender_role, receiver_uid, receiver_name, problem_id, text)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(senderUid, senderName || 'User', senderRole || 'student', receiverUid, receiverName || 'Mentor', problemId || '', text);
+
+    const messages = db.prepare(`
+      SELECT * FROM messages 
+      WHERE (sender_uid = ? AND receiver_uid = ?) OR (sender_uid = ? AND receiver_uid = ?)
+      ORDER BY created_at ASC
+    `).all(senderUid, receiverUid, receiverUid, senderUid);
+
+    return res.status(201).json({ message: 'Message sent successfully', messages });
+  } catch (err) {
+    console.error('Error in POST /api/messages:', err);
+    return res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Fetch messages for a user
+app.get('/api/messages/:userUid', (req, res) => {
+  try {
+    const { userUid } = req.params;
+    const messages = db.prepare(`
+      SELECT * FROM messages 
+      WHERE sender_uid = ? OR receiver_uid = ?
+      ORDER BY created_at ASC
+    `).all(userUid, userUid);
+    return res.json({ messages });
+  } catch (err) {
+    console.error('Error in GET /api/messages:', err);
+    return res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// -------------------------------------------------------------
 // 6. AI MENTOR CHAT PROXY ENDPOINT (Powered by Gemini API)
 // -------------------------------------------------------------
 app.post('/api/ai/chat', async (req, res) => {

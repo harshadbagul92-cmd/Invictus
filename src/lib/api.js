@@ -181,5 +181,34 @@ export const api = {
       console.error('API sendAiMessage error:', err);
       return null;
     }
+  },
+
+  // Messages: Send Message to Mentor / Student
+  async sendMessage(msgData) {
+    try {
+      const res = await fetch(`${API_BASE}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(msgData)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to send message');
+      return data;
+    } catch (err) {
+      console.warn('API sendMessage failed:', err);
+      return null;
+    }
+  },
+
+  // Messages: Fetch User Messages
+  async getMessages(userUid) {
+    try {
+      const res = await fetch(`${API_BASE}/messages/${userUid}`);
+      if (!res.ok) throw new Error('Failed to fetch messages');
+      return await res.json();
+    } catch (err) {
+      console.warn('API getMessages failed:', err);
+      return null;
+    }
   }
 };

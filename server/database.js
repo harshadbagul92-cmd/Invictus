@@ -33,6 +33,21 @@ export function initDb() {
     // Column already exists
   }
 
+  // Mentor Messages Table
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sender_uid TEXT NOT NULL,
+      sender_name TEXT NOT NULL,
+      sender_role TEXT NOT NULL,
+      receiver_uid TEXT NOT NULL,
+      receiver_name TEXT NOT NULL,
+      problem_id TEXT,
+      text TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
   // Problem Statements Table
   db.exec(`
     CREATE TABLE IF NOT EXISTS problem_statements (

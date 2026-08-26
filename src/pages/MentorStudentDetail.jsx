@@ -66,13 +66,31 @@ export const MentorStudentDetail = ({ studentId, onBack }) => {
   ]);
   const [newMsg, setNewMsg] = useState('');
 
-  const handleSendLiveMessage = () => {
+  const handleSendLiveMessage = async () => {
     if (!newMsg.trim()) return;
+
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const mentorMsgObj = {
+      sender_uid: 'men-001',
+      sender_name: 'Mentor',
+      sender_role: 'mentor',
+      receiver_uid: studentId || 'std-001',
+      receiver_name: student?.name || 'Student',
+      text: newMsg.trim(),
+      created_at: timeStr
+    };
+
     setMessages(prev => [
       ...prev,
-      { sender: 'mentor', text: newMsg, time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }
+      { sender: 'mentor', text: newMsg.trim(), time: timeStr }
     ]);
     setNewMsg('');
+
+    try {
+      await api.sendMessage(mentorMsgObj);
+    } catch (e) {}
+
+    showToast(`Message sent to ${student?.name || 'Student'}!`);
   };
 
   const handleMentorToggleTask = async (taskId, currentCompleted) => {
