@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const dbPath = path.join(__dirname, 'invictus.db');
+const isVercel = Boolean(process.env.VERCEL);
+const dbDir = isVercel ? '/tmp' : __dirname;
+const dbPath = path.join(dbDir, 'invictus.db');
 const db = new DatabaseSync(dbPath);
 
 // Initialize Tables
